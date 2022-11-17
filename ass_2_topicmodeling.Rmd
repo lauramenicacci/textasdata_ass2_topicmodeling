@@ -63,8 +63,7 @@ e_corpus %>%
 ## What years, countries and parties are included in the dataset? How many texts do you have for each of these
 
 ```{r}
-  
-# per year 
+# 55 documents 
 
 us_raw %>% group_by(edate) %>% count()
 
@@ -86,13 +85,8 @@ us_raw %>% group_by(party) %>% count()
 
 Here I tokenize the manifesto removing all punctuation and all numbers, and lemmatizing the words. I think this is a more powerful methods because it creates a better vocabulary.  
 I use quanteda functions to create the dfm and drop all quasi-sentences with headline codes (“H”), uncoded (“0”,“000”) and with codes missing (NA). Then I filter them for the cmp codes I am interested in, which are the following:
- * 607.3 Indigenous rights: Positive 
- * 608.3 Indigenous rights: Negative 
- * 602.2 Immigration: Positive
- * 601.2 Immigration: Negative
+
  * 503 Equality: Positive
- * 201.2 Human Rights 
- * 606.2 Bottom-Up Activism 
  * 501 Environmental protection
  
 Of course, reducing the documents to only the coded quasi sentences will have an impact as there are many sentences present that are not coded. This represents implicitly a selection bias. 
@@ -129,13 +123,7 @@ feature_frequencies_cat <- manif_plot_cmp %>% textstat_frequency(n = 15, group =
 
 feature_frequencies_cat %>%
   mutate(group = case_when(
-    group == "607.3" ~ "Indigenous rights: Positive", 
-    group == "608.3" ~ "Indigenous rights: Negative", 
-    group == "602.2" ~ "Immigration: Positive", 
-    group == "601.2" ~ "Immigration: Negative", 
     group == "503" ~ "Equality: Positive", 
-    group == "201.2" ~ "Human Rights", 
-    group == "606.2" ~ "Bottom-Up Activism", 
     group == "501" ~ "Environmental Protection")) %>%
   ggplot(aes(x = reorder(feature, frequency), y = frequency, fill = group)) +
   geom_col(show.legend = FALSE) +

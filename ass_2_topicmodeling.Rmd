@@ -33,18 +33,21 @@ library(corrplot)
 ```{r}
 mp_setapikey(key.file = "C:\\Users\\laura\\OneDrive\\Documenti\\LAURA\\HERTIE 21-22\\Introduction to DS\\manifesto_apikey.txt")
 
+us_raw <- read_csv('C:\\Users\\laura\\OneDrive\\Documenti\\LAURA\\HERTIE 22-23\\Text_as_Data_class\\ass_2_tad_topicmodeling\\MPDataset_MPDS2022a.csv')
+
+us_raw <- us_raw %>% 
+  filter(countryname == 'United States')
 ```
 
-## Filter dataset by italy & create corpus
- - we filter from 1990 to reduce scope and also because it can be considered as a turning point for climate change awareness 
- (ex. 1992 rio)
- 
+## Filter dataset by country & create corpus
+
 ```{r}
-us <- mp_availability(countryname  == "United States")
+us <- mp_availability(countryname == "United States")
 
 e <- mp_corpus(us)
 
 ```
+
 
 ```{r}
 e_corpus <- e %>%
@@ -52,43 +55,28 @@ e_corpus <- e %>%
   corpus(docid_field = "manifesto_id", unique_docnames = FALSE) %>% 
   corpus()
 
-e_corpus
-
 e_corpus %>%
   docvars()
-
-e_corpus$party
 ```
 
 
 ## What years, countries and parties are included in the dataset? How many texts do you have for each of these
 
 ```{r}
-
-# manifestos per year
-
-us %>% 
-  group_by(date) %>% 
-  count %>% 
-  ggplot(aes(x = date, y = n))+
-  geom_line() + geom_point() +
-  scale_x_continuous() +
-  theme_bw()
   
-# parties per year 
+# per year 
 
-us %>% 
-  group_by(date) %>% 
-  count %>% 
-  ggplot(aes(x = it$party, y = date))+
-  geom_line() + geom_point() +
-  scale_x_continuous(labels = c(seq(1946, 2018, 12)), breaks = seq(194606, 201803, 12)) +   theme_bw()
-
-# texts
+us_raw %>% group_by(edate) %>% count()
 
 
+table(us_raw$year)
+table(us_raw$countryname)
+table(us_raw$party)
 
-# plot n of text per parties, per countries and per years 
+ 
+us_raw %>% group_by(countryname) %>% count() 
+us_raw %>% group_by(party) %>% count() 
+
 ```
 
 
@@ -96,9 +84,18 @@ us %>%
 
 ## Prepare your data for topic modelling by creating a document feature matrix. Describe the choices you make here, and comment on how these might affect your final result.
 
-
-- spiega xk lemmatization and not stemming 
-- stemming because we have a lot of documents? process less data? 
+Here I tokenize the manifesto removing all punctuation and all numbers, and lemmatizing the words. I think this is a more powerful methods because it creates a better vocabulary.  
+I use quanteda functions to create the dfm and drop all quasi-sentences with headline codes (“H”), uncoded (“0”,“000”) and with codes missing (NA). Then I filter them for the cmp codes I am interested in, which are the following:
+ * 607.3 Indigenous rights: Positive 
+ * 608.3 Indigenous rights: Negative 
+ * 602.2 Immigration: Positive
+ * 601.2 Immigration: Negative
+ * 503 Equality: Positive
+ * 201.2 Human Rights 
+ * 606.2 Bottom-Up Activism 
+ * 501 Environmental protection
+ 
+Of course, reducing the documents to only the coded quasi sentences will have an impact as there are many sentences present that are not coded. This represents implicitly a selection bias. 
 
 ```{r}
 tokenized_manifesto <- e_corpus %>%
@@ -106,7 +103,7 @@ tokenized_manifesto <- e_corpus %>%
   tokens(remove_punct = TRUE, remove_numbers = TRUE) %>%
   tokens_tolower() %>%
   tokens_remove(stopwords("english")) %>% 
-  tokens_remove(c("will")) %>% 
+  tokens_remove(c("will", "american")) %>% 
   tokens_replace(pattern = lexicon::hash_lemmas$token, replacement = lexicon::hash_lemmas$lemma)
 ```
 
@@ -116,7 +113,9 @@ tokenized_manifesto <- e_corpus %>%
 manifesto_dfm <- tokenized_manifesto %>% 
   dfm() %>% 
   dfm_subset(!(cmp_code %in% c("H", "", "0", "000", NA))) %>% 
-  dfm_subset(cmp_code %in% c('607.3', '602.2', '601.2', '503', '201.2', '606.2', '501'))
+  dfm_subset(cmp_code %in% c('503', '501'))
+
+manifesto_dfm$id %>% unique() # number of text in the final preprocessed manifesto 
 ```
 
 ## some exploratory plotting
@@ -126,7 +125,7 @@ manifesto_dfm <- tokenized_manifesto %>%
 manif_plot_cmp <- manifesto_dfm %>% dfm_group(cmp_code)
 
 library(quanteda.textstats)
-feature_frequencies_cat <- manif_plot_cmp %>% textstat_frequency(n = 5, group = cmp_code)
+feature_frequencies_cat <- manif_plot_cmp %>% textstat_frequency(n = 15, group = cmp_code)
 
 feature_frequencies_cat %>%
   mutate(group = case_when(
@@ -145,12 +144,8 @@ feature_frequencies_cat %>%
   coord_flip() +
   theme_bw()
 
-ggsave('plots\top_words_cmp.png', width = 12, height = 8)
+# ggsave('plots/top_words_cmp.png', width = 12, height = 8)
 ```
-
-
-
-comment: theres no indigenous rights negative!
 
 ```{r}
 manif_plot_party <- manifesto_dfm %>% dfm_group(party)
@@ -169,70 +164,54 @@ feature_frequencies_cat %>%
   coord_flip() +
   theme_bw() 
 
-ggsave('plots\top_words_party.png', width = 12, height = 8)
+# ggsave('plots\top_words_party.png', width = 12, height = 8)
 
 ```
-
-
-# maybe another graph with top words per manifesto id 
-
- - n of sentences per code + 
- - years of these manyfestos 
-
-```{r}
-
-```
-
 
 # Describe a research question you want to explore with topic modelling. Comment on how answerable this is with the methods and data at your disposal.
 
 ## Research question: 
 
-1. Looking out for climate justice in the political manifestos in the United States. 
+1. Looking out for connection points in between climate change and equality themes in the political manifestos in the United States. 
 
-can environmental protection and elements of social justice / social welfare be considered similar? 
+* Can environmental protection and elements of social welfare as equality be considered similar? 
 
-One can easily assume that these are two separate topics, but what's their political role when parties write their manifestos? could they have some political connections or correlations? 
+In general, these can be considered as two separated topics. On the one side, climate change is a relatively new topic, as it only started to be present in politics in the last 20/30 years. We can recall the first political commitments to the conference hosted in Rio de Janeiro in 1992, and then the ratification of the Kyoto Protocol in 1997. The United States pushed at the beginning for the creation of international debate around climate change, however they did not ratify Kyoto in the beginning. 
 
-In the context of the united states, this are themes particularly covered by the democratic party. But how do they talk about it? In which way they use such topics? Can they have a similar political role? If yes, can this be expressed in the way they talk about it? 
+For what concerns equality, especially gender equality, this is a much more old political thematic. In particular, the US are famous for being the country that mostly contributed to the third feminist wave. However, the codification made by the ManifestoProject researchers it's interesting because it implies an 'inclusive' equality, not only a gender equality. This is particularly interesting in the context of climate change because recent studies affirm that race and pollution are correlated, meaning that often in the US, black people are more affected by climate change as they more often live close to hazardous waste (Fumes Across the Fence-Line: The Health Impacts of Air Pollution
+from Oil & Gas Facilities on African American Commmunities, 2017 NAACP). 
 
-Topic modeling will help us to understand if these topics are classified as extremely distinct or they have some overlaps. 
+But let's get into the research question: I am interested in seeing whether in the political manifestos of the last 30 years, US parties, especially the democrats, addressed potential electors using similar words for the topics of equality and climate change. 
 
-Description: only after 90s --> bush was the first to talk about it
+I am interested in seeing what is the political role when parties write their manifestos, and whether they could have some political connections or correlations. 
 
-In this assignment i will inspect possible connections with the topics of social welfare and environmental protection, and see if they have anything in common 
+In the context of the US, this are themes particularly covered by the Democratic party. But how do they talk about it? In which way they use such topics? Can they have a similar political role? If yes, can this be expressed in the way they talk about it? 
 
-TO DO: 
-select all the english speaking countries - select all the codes that could involve climate justice 
- 
- * 607.3 Indigenous rights: Positive 
- * 608.3 Indigenous rights: Negative 
- * 602.2 Immigration: Positive
- * 601.2 Immigration: Negative
- * 503 Equality: Positive
- * 201.2 Human Rights 
- * 606.2 Bottom-Up Activism 
- * 501 Environmental protection 
+Topic modeling will help to understand if these topics are classified as extremely distinct or they have some overlaps. 
 
+In this assignment I will inspect possible connections using LDA. 
 
+After filtering for the two codes, we have 10 manifestos corresponding to the year range 1992 - 2020. 
 
-check number of documents: 10 manifestos selected --> manifesto_dfm$id %>% unique() to see unique names of manifestos 
+Potential limitations:
 
-comment about party imbalance 
+* 
 
 # Create a topic model using your data. Explain to a non-specialist what the topic model does. Comment on the choices you make here in terms of hyperparameter selection and model choice. How might these affect your results and the ability to answer your research question?
 
-### Describe the topic model. What topics does it contain? How are these distributed across the data?
+LDA is one of the most popular topic models. It is a probabilistic model. LDA assigns to each word, a probability to belong to a topic, and to each document (in this case the quasi-sentence), a probability to belong to a topic. 
+This is done using a particular distribution, the Dirichlet distribution. 
 
+One of the hyperparameters is the number of topics, which can be either arbitrarily decided through a trial and error process (manual grid search), or calculated evaluating the log-likelihood for the k number of topics using, the harmonic mean as it is done in Ponweiser, M. (2012).
 
-## Use your topic model to answer your research question by showing plots or statistical results. Discuss the implications of what you find, and any limitations inherent in your approach. Discuss how the work could be improved upon in future research.
+In this case, the manual grid search process will be used. 
 
 ### Topic modeling: inspecting topic similarity with lda function in topicmodels package
 
 ```{r}
 library(topicmodels)
 
-lda_tidy <- LDA(manifesto_dfm, 9)
+lda_tidy <- LDA(manifesto_dfm, 8)
 
 library(reshape2)
 library(tidytext)
@@ -256,7 +235,18 @@ topic_words %>%
          subtitle = "Different words are associated with different topics")
 
 ```
-Visualize Lda & topic overlap by phi value
+# Describe the topic model. What topics does it contain? How are these distributed across the data?
+
+An important remark to make is that LDA is a probabilistic model, which means that if it is re-trained it multiple times it will output different results each time. An ideal practice would be to run the model multiple times and then produce an average of the posterior probabilities, to understand better if there is coherence in the topic clustering. 
+
+During the trial and error process, a clustering with a decent separation was found with k = 8. 
+Interesting observations:
+* often the word "woman" appears in the same topic with the word "support", ensure. 
+* often there is more than one topic dealing with environment, and one of the sometimes includes the word 'gender' or "community". 
+* When people or the community are addressed, often the word "woman" appears. 
+
+
+## Use your topic model to answer your research question by showing plots or statistical results. Discuss the implications of what you find, and any limitations inherent in your approach. Discuss how the work could be improved upon in future research.
 
 
 ```{r}
@@ -281,23 +271,26 @@ json <- topicmodels2LDAvis(lda_tidy)
 serVis(json)
 
 ```
-Comment: topic 2 and 8 are overlapping: one of them talks about climate change (at least as it seems). What does it mean? 
+This very informative graph provides a more comprehensive picture of the topic model performance. We can see that topic 1,3 and 7 are almost overlapping. The rest of the topics are quite separated. 
+This overlapping is interesting for my research question because it contains one topic mostly dealing with environmental protection, and the other two topics dealing most probably with equality themes. 
+This could mean that there are some documents and some manifestos that the model is struggling to cluster. 
+This could be a hint that in some manifestos the parties use similar words for the same themes. 
 
+Topic 4 is dealing with equality themes, having as first 3 words: student, disability, family. Also in the correlation plot, we see that this topic has one of the highest negative probabilities, especially to be correlated with topic 1 - that deals with climate change themes - so this is reasonable. This is another signal that this clustering is robust, and that different specifications have consistent results.
 
-
-Compare the found topics and see if they are correlated! 
+Here I take the per document probabilities of the topics to dive deep into the topic distribution. How clear is the topic allocation per document according to the topic division? 
 
 ```{r}
-head(topics(lda_tidy), 10) # these are the 10 documents with the highest probability of belonging to this topic, let's inspect the first one 
-
-e_corpus[['61320_199211.19']]
+doc_x_topic <- as.data.frame(topicmodels::posterior(lda_tidy)$topics)
+head(doc_x_topic) # probabilities of the first 5 documents to belong to that topic 
 ```
 
+## Distribution of documents per topics
 
 ```{r}
 # Creates a dataframe to store the document id and the most likely topic
 
-# doc_x_topic <- as.data.frame(topicmodels::posterior(lda_tidy)$topics)
+doc_x_topic <- as.data.frame(topicmodels::posterior(lda_tidy)$topics)
 head(doc_x_topic) # probabilities of the first 5 documents to belong to that topic 
 
 topics <- (topics(lda_tidy))
@@ -307,10 +300,10 @@ lda_topics <- dplyr::transmute(lda_topics, ManifestoId = rownames(lda_topics), T
 
 head(lda_topics)
 
-lda_topics %>% 
-  ggplot(aes(x = Topic)) + geom_bar(fill = 'lightblue') + scale_x_discrete(labels = labels) + ylab('Distribution of documents per topic') + xlab('Topics') + theme_bw()
+lda_topics %>% mutate(Topic = as.factor(Topic)) %>% 
+  ggplot(aes(x = Topic)) + geom_bar(fill = 'lightblue') + ylab('Distribution of documents per topic') + xlab('Topics') + theme_bw()
 ```
-
+## Correlation plot
 
 ```{r}
 
@@ -321,24 +314,26 @@ c <- cor(prob_x_topic)
 corrplot(c, method = "circle")
 
 ```
-LDA is a probabilistic model, which means that if you re-train it with the same hyperparameters, you will get different results each time. 
+In this correlation plot we see that most of the topics are negatively correlated between each other. 
+The onyl *slightly* positively correlated topics are 3 and 4, so the ones dealing withe equality in a stricter sense.
+This is an important conclusion for the research question: the fact that these probabilities are negatively correlated can mean that there is a high probability that a document belongs to topic 1 for instance, then the probability that it belongs to topic 3 is very low. 
+This could be an indicator that the topics are well separated. However, with respect to my research question, this is bad news: there's no relevant positive correlation about the probability distribution of the quasi-sentences assigned to the respective topics. 
 
-If we retrain the model multiple times and the environmental-related topic and the other one stay similar: we can say that there are some topic similarities according to LDA. 
+This could mean that either this is not a good way to evaluated this model in terms of my research question, or that simply the answer to my research question is a big *no*. 
+ 
 
-A good practice is to run the model with the same number of topics multiple times and then average the topic coherence.
+### Analyse coherence and prevalence 
 
-I will use a different package this time (textmineR) to perform multiple ldas and evaluate coherence and performance 
+Here I will try another strategy, this time with a different LDA package, textminingR. I will also try to use difference metrics, meaning coherence and prevalence. 
 
-### coherence and prevalence 
-
-First subset the dfm by the code of interest, then perform lda with textminingR 
+First subset the corpus by the codes of interest, then run the model. 
 
 ```{r}
 library(textmineR)
 
 e_corpus_lda1 <- e_corpus %>% 
   corpus_subset(!(cmp_code %in% c("H", "", "0", "000", NA))) %>% 
-  corpus_subset(cmp_code %in% c('501', '503')) # %>% 
+  corpus_subset(cmp_code %in% c('501', '503')) %>% 
   corpus_group(id)
 
 dtm1 <- CreateDtm(doc_vec = e_corpus_lda1,
@@ -348,7 +343,7 @@ dtm1 <- CreateDtm(doc_vec = e_corpus_lda1,
                    verbose = F)
 
 lda1 <- FitLdaModel(dtm = dtm1,
-                         k = 10, # number of topic
+                         k = 8, # number of topic
                          iterations = 50,
                          burnin = 5,
                          alpha = 0.1,
@@ -362,40 +357,24 @@ lda1 <- FitLdaModel(dtm = dtm1,
 
 Inspect results and plot coherence and prevalence
 
-explain what is coherence
-explain what is prevalence
-
-What is coherence and coherence score? Coherence gives the probabilistic coherence of each topic. Coherence score is a score that calculates if the words in the same topic make sense when they are put together. This gives us the quality of the topics being produced. The higher the score for the specific number of k, it means for each topic, there will be more related words together and the topic will make more sense
-
-We also want to look at prevalence value. Prevalence tells us the most frequent topics in the corpus. Prevalence is the probability of topics distribution in the whole documents.
+Here, coeherence tell us how associated words are in a topic. Prevalence tells us insted the most frequent topics in the corpus.
 
 ```{r}
-top_terms <- GetTopTerms(phi = lda1$phi, M = 15) #distribution of 
-lda1$top_terms
+top_terms <- GetTopTerms(phi = lda1$phi, M = 10) 
+top_terms
+```
+
+```{r}
+lda1$topterms <- top_terms
+data.frame(lda1$top_terms)
 
 lda1$coherence
 
 lda1$prevalence <- colSums(lda1$theta)/sum(lda1$theta)*100
 lda1$prevalence
-
-lda1$summary <- data.frame(topic = rownames(lda1$phi),
-                                coherence = round(lda1$coherence,3),
-                                prevalence = round(lda1$prevalence,3),
-                                top_terms = apply(lda1$top_terms,2,function(x){paste(x,collapse = ", ")}))
-
-modsum1 <- lda1$summary %>%
-  `rownames<-`(NULL)
-
-modsum1 %>% pivot_longer(cols = c(coherence,prevalence)) %>%
-  ggplot(aes(x = factor(topic,levels = unique(topic)), y = value, group = 1)) +
-  geom_point() + geom_line() +
-  facet_wrap(~name,scales = "free_y",nrow = 2) +
-  theme_minimal() +
-  labs(title = "Best topics by coherence and prevalence score",
-       subtitle = "Topics including 501 and 503 cmp codes",
-       x = "Topics", y = "Value")
 ```
 
+Here I try different model specifications. 
 
 ```{r}
 
@@ -425,32 +404,19 @@ ggplot(coherence_mat, aes(x = reorder(k, coherence), y = coherence)) +
   geom_bar(stat = "identity", fill = 'lightblue') +
   ggtitle("Best Topic by Coherence Score") + theme_minimal() + ylab("Coherence") +xlab('Topic')
 ```
-
-################################################################################ 
-
+According to the coherence score, the best k for this model is 4. 
 
 
-Coherence matrix across different topic models 
-```{r}
-model_list <- list(modsum1, modsum2)
+## Conclusion 
 
-coherence_mat <- data.frame(k = sapply(model_list, function(x) nrow(x$phi)), 
-                            coherence = sapply(model_list, function(x) mean(x$coherence)), 
-                            stringsAsFactors = FALSE)
+In general, the topic clustering seems to be robust. A further robustness check that could have been done is plotting the probability distributions of the topics per document. This would have provided a clear picture of how strong this kind of clustering is. Evaluating the best number of topics through the log-likelihood of the harmonic mean also could have improved the model selection process.
 
-ggplot(coherence_mat, aes(x = k, y = coherence)) +
-  geom_point() +
-  geom_line(group = 1)+
-  ggtitle("Best Topic by Coherence Score") + theme_minimal() +
-  scale_x_continuous(breaks = seq(1,20,1)) + ylab("Coherence")
-```
+For what concerns my research question, an important contribution would have been to go back from the topic allocation to the manifesto, in order to provide more information. Without this piece of information is difficult to set a clear answer. 
+
+The final evaluation is that the model manages to cluster the topics in a decent way. There answer to the research question is:
+ The model performs well, and the fact that there are some overlapping topics is a signal that the themes of interest (environment, equality) have some overlapping. The model - from the present evaluation - seems robust, but I acknowledge that not everything has been done to doublecheck. 
 
 
-
-```{r}
-lda1$linguistic <- CalcHellingerDist(lda1$phi)
-lda1$hclust <- hclust(as.dist(lda1$linguistic),"ward.D")
-lda1$hclust$labels <- paste(lda1$hclust$labels, lda1$labels[,1])
-plot(lda1$hclust)
-```
+## References 
+Latent Dirichlet Allocation in R. (Theses / Institute for Statistics and Mathematics; No. 2). WU Vienna University of Economics and Business.
 
